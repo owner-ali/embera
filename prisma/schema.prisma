@@ -1,0 +1,364 @@
+// ============================================================
+// EMBERA — Prisma Schema
+// Crafted for the Extraordinary. — CodedByAli
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ------------------------------------------------------------
+// AUTH / ADMIN USERS
+// ------------------------------------------------------------
+
+enum Role {
+  SUPER_ADMIN
+  MANAGER
+  STAFF
+}
+
+enum PermissionKey {
+  DASHBOARD
+  ORDERS
+  MENU
+  RESERVATIONS
+  CUSTOMERS
+  REVIEWS
+  GALLERY
+  MESSAGES
+  ANALYTICS
+  SETTINGS
+  USERS
+}
+
+model User {
+  id            String       @id @default(cuid())
+  name          String
+  email         String       @unique
+  passwordHash  String
+  role          Role         @default(STAFF)
+  avatarUrl     String?
+  isActive      Boolean      @default(true)
+  permissions   Permission[]
+  notifications Notification[]
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@index([email])
+}
+
+model Permission {
+  id     String        @id @default(cuid())
+  key    PermissionKey
+  user   User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+
+  @@unique([userId, key])
+}
+
+// ------------------------------------------------------------
+// MENU
+// ------------------------------------------------------------
+
+model Category {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?
+  imageUrl    String?
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  dishes      Dish[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Dish {
+  id             String        @id @default(cuid())
+  name           String
+  slug           String        @unique
+  description    String
+  price          Decimal       @db.Decimal(10, 2)
+  imageUrl       String
+  gallery        String[]      @default([])
+  calories       Int?
+  allergens      String[]      @default([])
+  isVegetarian   Boolean       @default(false)
+  isSpicy        Boolean       @default(false)
+  isFeatured     Boolean       @default(false)
+  isAvailable    Boolean       @default(true)
+  rating         Decimal       @default(0) @db.Decimal(2, 1)
+  ratingCount    Int           @default(0)
+  category       Category      @relation(fields: [categoryId], references: [id])
+  categoryId     String
+  ingredients    Ingredient[]
+  orderItems     OrderItem[]
+  cartItems      CartItem[]
+  reviews        Review[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([categoryId])
+  @@index([slug])
+}
+
+model Ingredient {
+  id     String @id @default(cuid())
+  name   String
+  dish   Dish   @relation(fields: [dishId], references: [id], onDelete: Cascade)
+  dishId String
+}
+
+// ------------------------------------------------------------
+// CART / ORDERS
+// ------------------------------------------------------------
+
+enum OrderType {
+  PICKUP
+  DELIVERY
+  DINE_IN
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PREPARING
+  READY
+  OUT_FOR_DELIVERY
+  COMPLETED
+  CANCELLED
+}
+
+model Cart {
+  id        String     @id @default(cuid())
+  sessionId String     @unique
+  customer  Customer?  @relation(fields: [customerId], references: [id])
+  customerId String?
+  items     CartItem[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+model CartItem {
+  id            String   @id @default(cuid())
+  cart          Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  cartId        String
+  dish          Dish     @relation(fields: [dishId], references: [id])
+  dishId        String
+  quantity      Int      @default(1)
+  spicyLevel    String?
+  extraCheese   Boolean  @default(false)
+  extraSauce    Boolean  @default(false)
+  sideDish      String?
+  notes         String?
+  unitPrice     Decimal  @db.Decimal(10, 2)
+  createdAt     DateTime @default(now())
+}
+
+model Customer {
+  id           String        @id @default(cuid())
+  name         String
+  email        String        @unique
+  phone        String?
+  passwordHash String?
+  addresses    Address[]
+  orders       Order[]
+  reservations Reservation[]
+  reviews      Review[]
+  carts        Cart[]
+  totalSpent   Decimal       @default(0) @db.Decimal(10, 2)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+model Address {
+  id         String   @id @default(cuid())
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customerId String
+  line1      String
+  city       String
+  notes      String?
+  isDefault  Boolean  @default(false)
+}
+
+model Order {
+  id              String        @id @default(cuid())
+  orderNumber     String        @unique
+  customer        Customer?     @relation(fields: [customerId], references: [id])
+  customerId      String?
+  guestName       String?
+  guestEmail      String?
+  guestPhone      String?
+  items           OrderItem[]
+  orderType       OrderType
+  address         String?
+  city            String?
+  notes           String?
+  paymentMethod   PaymentMethod
+  paymentStatus   PaymentStatus @default(PENDING)
+  status          OrderStatus   @default(PENDING)
+  subtotal        Decimal       @db.Decimal(10, 2)
+  tax             Decimal       @db.Decimal(10, 2)
+  deliveryFee     Decimal       @default(0) @db.Decimal(10, 2)
+  discount        Decimal       @default(0) @db.Decimal(10, 2)
+  total           Decimal       @db.Decimal(10, 2)
+  estimatedTime   DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([status])
+  @@index([customerId])
+}
+
+model OrderItem {
+  id          String  @id @default(cuid())
+  order       Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId     String
+  dish        Dish    @relation(fields: [dishId], references: [id])
+  dishId      String
+  quantity    Int
+  unitPrice   Decimal @db.Decimal(10, 2)
+  spicyLevel  String?
+  extraCheese Boolean @default(false)
+  extraSauce  Boolean @default(false)
+  sideDish    String?
+  notes       String?
+}
+
+// ------------------------------------------------------------
+// RESERVATIONS
+// ------------------------------------------------------------
+
+enum ReservationStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+model RestaurantTable {
+  id           String        @id @default(cuid())
+  label        String        @unique
+  capacity     Int
+  isActive     Boolean       @default(true)
+  reservations Reservation[]
+}
+
+model Reservation {
+  id              String            @id @default(cuid())
+  customer        Customer?         @relation(fields: [customerId], references: [id])
+  customerId      String?
+  name            String
+  email           String
+  phone           String
+  date            DateTime
+  time            String
+  guests          Int
+  specialRequest  String?
+  table           RestaurantTable?  @relation(fields: [tableId], references: [id])
+  tableId         String?
+  status          ReservationStatus @default(PENDING)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([date, time])
+  @@index([status])
+}
+
+// ------------------------------------------------------------
+// REVIEWS
+// ------------------------------------------------------------
+
+model Review {
+  id         String   @id @default(cuid())
+  customer   Customer? @relation(fields: [customerId], references: [id])
+  customerId String?
+  guestName  String?
+  photoUrl   String?
+  rating     Int
+  comment    String
+  dish       Dish?    @relation(fields: [dishId], references: [id])
+  dishId     String?
+  isApproved Boolean  @default(false)
+  isFeatured Boolean  @default(false)
+  createdAt  DateTime @default(now())
+}
+
+// ------------------------------------------------------------
+// GALLERY
+// ------------------------------------------------------------
+
+enum GalleryCategory {
+  FOOD
+  INTERIOR
+  CHEF
+  KITCHEN
+  EVENTS
+}
+
+model GalleryImage {
+  id         String          @id @default(cuid())
+  url        String
+  alt        String
+  category   GalleryCategory
+  isFeatured Boolean         @default(false)
+  sortOrder  Int             @default(0)
+  createdAt  DateTime        @default(now())
+}
+
+// ------------------------------------------------------------
+// CONTACT / NOTIFICATIONS / SETTINGS
+// ------------------------------------------------------------
+
+model ContactMessage {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  phone     String?
+  message   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+enum NotificationType {
+  ORDER
+  RESERVATION
+  REVIEW
+  CUSTOMER
+  MESSAGE
+}
+
+model Notification {
+  id        String            @id @default(cuid())
+  type      NotificationType
+  title     String
+  body      String
+  link      String?
+  isRead    Boolean           @default(false)
+  user      User?             @relation(fields: [userId], references: [id])
+  userId    String?
+  createdAt DateTime          @default(now())
+}
+
+model SiteSetting {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String @db.Text
+}
